@@ -1,12 +1,29 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { useSpotify } from '@/hooks/useSpotify';
+import { SpotifySidebar } from '@/components/SpotifySidebar';
+import { StatsDashboard } from '@/components/StatsDashboard';
 
 const Index = () => {
+  const { isLoggedIn, user, topTracks, topArtists, loading, error, logout } = useSpotify();
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
-      </div>
+    <div className="flex min-h-screen bg-background">
+      <SpotifySidebar
+        isLoggedIn={isLoggedIn}
+        user={user}
+        loading={loading}
+        onLogout={logout}
+      />
+      <StatsDashboard
+        topTracks={topTracks}
+        topArtists={topArtists}
+        loading={loading}
+        isLoggedIn={isLoggedIn}
+      />
+      {error && (
+        <div className="fixed bottom-4 right-4 bg-destructive text-destructive-foreground p-3 rounded-md text-sm">
+          {error}
+        </div>
+      )}
     </div>
   );
 };
