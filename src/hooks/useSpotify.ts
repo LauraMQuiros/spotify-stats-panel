@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
-  getTokenFromUrl,
+  getCodeFromUrl,
+  exchangeCodeForToken,
   clearTokenFromUrl,
   fetchUserProfile,
   fetchTopTracks,
@@ -18,19 +19,35 @@ export const useSpotify = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Handle OAuth callback with authorization code
   useEffect(() => {
-    const storedToken = localStorage.getItem('spotify_token');
-    const urlToken = getTokenFromUrl();
+    const handleCallback = async () => {
+      const code = getCodeFromUrl();
+      const storedToken = localStorage.getItem('spotify_token');
 
-    if (urlToken) {
-      localStorage.setItem('spotify_token', urlToken);
-      setToken(urlToken);
-      clearTokenFromUrl();
-    } else if (storedToken) {
-      setToken(storedToken);
-    }
+      if (code) {
+        setLoading(true);
+        try {
+          const accessToken = await exchangeCodeForToken(code);
+          localStorage.setItem('spotify_token', accessToken);
+          setToken(accessToken);
+          clearTokenFromUrl();
+        } catch (err) {
+          console.error('Token exchange error:', err);
+          setError('Failed to authenticate with Spotify. Please try again.');
+          clearTokenFromUrl();
+        } finally {
+          setLoading(false);
+        }
+      } else if (storedToken) {
+        setToken(storedToken);
+      }
+    };
+
+    handleCallback();
   }, []);
 
+  // Fetch user data when token is available
   useEffect(() => {
     if (!token) return;
 
@@ -47,6 +64,7 @@ export const useSpotify = () => {
         setTopTracks(tracksData.items);
         setTopArtists(artistsData.items);
       } catch (err) {
+        console.error('Data fetch error:', err);
         setError('Failed to fetch Spotify data. Token may have expired.');
         logout();
       } finally {
@@ -59,6 +77,7 @@ export const useSpotify = () => {
 
   const logout = () => {
     localStorage.removeItem('spotify_token');
+    localStorage.removeItem('code_verifier');
     setToken(null);
     setUser(null);
     setTopTracks([]);

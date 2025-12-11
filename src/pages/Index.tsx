@@ -1,9 +1,19 @@
 import { useSpotify } from '@/hooks/useSpotify';
 import { SpotifySidebar } from '@/components/SpotifySidebar';
 import { StatsDashboard } from '@/components/StatsDashboard';
+import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 const Index = () => {
   const { isLoggedIn, user, topTracks, topArtists, loading, error, logout } = useSpotify();
+  const navigate = useNavigate();
+
+  // Handle callback redirect - clean up the URL
+  useEffect(() => {
+    if (window.location.pathname === '/callback/' || window.location.pathname === '/callback') {
+      navigate('/', { replace: true });
+    }
+  }, [navigate]);
 
   return (
     <div className="flex min-h-screen bg-background">
