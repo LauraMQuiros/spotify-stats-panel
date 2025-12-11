@@ -5,7 +5,22 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const Index = () => {
-  const { isLoggedIn, user, topTracks, topArtists, loading, error, logout, listening } = useSpotify();
+  const {
+    isLoggedIn,
+    user,
+    topTracks,
+    topArtists,
+    loading,
+    error,
+    logout,
+    listening,
+    timeRange,
+    setTimeRange,
+    trackPlayCounts,
+    artistPlayCounts,
+    minutesListened,
+    minutesPerDay,
+  } = useSpotify();
   const navigate = useNavigate();
 
   // Handle callback redirect - clean up the URL
@@ -29,6 +44,12 @@ const Index = () => {
         topArtists={topArtists}
         loading={loading}
         isLoggedIn={isLoggedIn}
+        timeRange={timeRange}
+        onTimeRangeChange={setTimeRange}
+        trackPlayCounts={trackPlayCounts}
+        artistPlayCounts={artistPlayCounts}
+        minutesListened={minutesListened}
+        minutesPerDay={minutesPerDay}
       />
       {error && (
         <div className="fixed bottom-4 right-4 bg-destructive text-destructive-foreground p-3 rounded-md text-sm">

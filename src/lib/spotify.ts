@@ -167,6 +167,11 @@ export interface SpotifyListeningContext {
   isPlaying: boolean;
 }
 
+export interface SpotifyPlayHistoryEntry {
+  track: SpotifyTrack;
+  played_at: string;
+}
+
 // API Functions
 export const fetchSpotifyData = async (endpoint: string, token: string) => {
   const response = await fetch(`https://api.spotify.com/v1${endpoint}`, {
@@ -223,4 +228,17 @@ export const fetchRecentlyPlayedTrack = async (token: string): Promise<SpotifyLi
   if (!recentTrack) return null;
 
   return { track: recentTrack, isPlaying: false };
+};
+
+export const fetchRecentlyPlayed = async (token: string, limit: number = 50): Promise<SpotifyPlayHistoryEntry[]> => {
+  const response = await fetch(`https://api.spotify.com/v1/me/player/recently-played?limit=${limit}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to fetch recently played tracks');
+  }
+
+  const data = await response.json();
+  return (data?.items ?? []) as SpotifyPlayHistoryEntry[];
 };
