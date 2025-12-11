@@ -162,6 +162,11 @@ export interface SpotifyTopArtistsResponse {
   items: SpotifyArtist[];
 }
 
+export interface SpotifyListeningContext {
+  track: SpotifyTrack;
+  isPlaying: boolean;
+}
+
 // API Functions
 export const fetchSpotifyData = async (endpoint: string, token: string) => {
   const response = await fetch(`https://api.spotify.com/v1${endpoint}`, {
@@ -181,4 +186,41 @@ export const fetchTopTracks = async (token: string, timeRange: string = 'medium_
 
 export const fetchTopArtists = async (token: string, timeRange: string = 'medium_term'): Promise<SpotifyTopArtistsResponse> => {
   return fetchSpotifyData(`/me/top/artists?time_range=${timeRange}&limit=20`, token);
+};
+
+export const fetchCurrentlyPlayingTrack = async (token: string): Promise<SpotifyListeningContext | null> => {
+  const response = await fetch('https://api.spotify.com/v1/me/player/currently-playing', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (response.status === 204) {
+    // 204 No Content means nothing is currently playing
+    return null;
+  }
+
+  if (!response.ok) {
+    throw new Error('Failed to fetch currently playing track');
+  }
+
+  const data = await response.json();
+  if (!data?.item) return null;
+
+  return { track: data.item as SpotifyTrack, isPlaying: !!data.is_playing };
+};
+
+export const fetchRecentlyPlayedTrack = async (token: string): Promise<SpotifyListeningContext | null> => {
+  const response = await fetch('https://api.spotify.com/v1/me/player/recently-played?limit=1', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to fetch recently played track');
+  }
+
+  const data = await response.json();
+  const recentTrack = data?.items?.[0]?.track as SpotifyTrack | undefined;
+
+  if (!recentTrack) return null;
+
+  return { track: recentTrack, isPlaying: false };
 };

@@ -6,9 +6,12 @@ import {
   fetchUserProfile,
   fetchTopTracks,
   fetchTopArtists,
+  fetchCurrentlyPlayingTrack,
+  fetchRecentlyPlayedTrack,
   SpotifyUser,
   SpotifyTrack,
   SpotifyArtist,
+  SpotifyListeningContext,
 } from '@/lib/spotify';
 
 export const useSpotify = () => {
@@ -16,6 +19,7 @@ export const useSpotify = () => {
   const [user, setUser] = useState<SpotifyUser | null>(null);
   const [topTracks, setTopTracks] = useState<SpotifyTrack[]>([]);
   const [topArtists, setTopArtists] = useState<SpotifyArtist[]>([]);
+  const [listening, setListening] = useState<SpotifyListeningContext | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,14 +59,17 @@ export const useSpotify = () => {
       setLoading(true);
       setError(null);
       try {
-        const [userData, tracksData, artistsData] = await Promise.all([
+        const [userData, tracksData, artistsData, currentlyPlaying, recentlyPlayed] = await Promise.all([
           fetchUserProfile(token),
           fetchTopTracks(token),
           fetchTopArtists(token),
+          fetchCurrentlyPlayingTrack(token),
+          fetchRecentlyPlayedTrack(token),
         ]);
         setUser(userData);
         setTopTracks(tracksData.items);
         setTopArtists(artistsData.items);
+        setListening(currentlyPlaying ?? recentlyPlayed ?? null);
       } catch (err) {
         console.error('Data fetch error:', err);
         setError('Failed to fetch Spotify data. Token may have expired.');
@@ -82,6 +89,7 @@ export const useSpotify = () => {
     setUser(null);
     setTopTracks([]);
     setTopArtists([]);
+    setListening(null);
   };
 
   return {
@@ -89,6 +97,7 @@ export const useSpotify = () => {
     user,
     topTracks,
     topArtists,
+    listening,
     loading,
     error,
     logout,

@@ -5,7 +5,7 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const Index = () => {
-  const { isLoggedIn, user, topTracks, topArtists, loading, error, logout } = useSpotify();
+  const { isLoggedIn, user, topTracks, topArtists, loading, error, logout, listening } = useSpotify();
   const navigate = useNavigate();
 
   // Handle callback redirect - clean up the URL
@@ -22,6 +22,7 @@ const Index = () => {
         user={user}
         loading={loading}
         onLogout={logout}
+        listening={listening}
       />
       <StatsDashboard
         topTracks={topTracks}
