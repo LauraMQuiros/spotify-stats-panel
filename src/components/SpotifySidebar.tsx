@@ -1,68 +1,41 @@
-import { Button } from '@/components/ui/button';
-import { getSpotifyAuthUrl, SpotifyUser } from '@/lib/spotify';
-import { LogOut, Music } from 'lucide-react';
+// File: `src/components/SpotifySidebar.tsx`
+import React, { useEffect, useState } from 'react';
+import { loginToSpotify, getTokenFromUrl, clearTokenFromUrl } from '../lib/spotify';
 
-interface SpotifySidebarProps {
-  isLoggedIn: boolean;
-  user: SpotifyUser | null;
-  loading: boolean;
-  onLogout: () => void;
-}
+const TOKEN_KEY = 'spotify_token';
 
-export const SpotifySidebar = ({ isLoggedIn, user, loading, onLogout }: SpotifySidebarProps) => {
-  const handleLogin = () => {
-    window.location.href = getSpotifyAuthUrl();
-  };
+export default function SpotifySidebar() {
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY));
+
+  useEffect(() => {
+    const t = getTokenFromUrl();
+    if (t) {
+      localStorage.setItem(TOKEN_KEY, t);
+      setToken(t);
+      clearTokenFromUrl();
+    }
+  }, []);
 
   return (
-    <aside className="w-64 min-h-screen bg-sidebar border-r border-sidebar-border p-4 flex flex-col">
-      <div className="flex items-center gap-2 mb-8">
-        <Music className="h-6 w-6 text-sidebar-primary" />
-        <h1 className="text-lg font-bold text-sidebar-foreground">Spotify Stats</h1>
-      </div>
-
-      <div className="flex-1">
-        {loading ? (
-          <p className="text-sm text-muted-foreground">Loading...</p>
-        ) : isLoggedIn && user ? (
-          <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              {user.images?.[0] && (
-                <img
-                  src={user.images[0].url}
-                  alt={user.display_name}
-                  className="w-10 h-10 rounded-full"
-                />
-              )}
-              <div>
-                <p className="font-medium text-sidebar-foreground">{user.display_name}</p>
-                <p className="text-xs text-muted-foreground">{user.email}</p>
-              </div>
-            </div>
-
-            <div className="text-sm text-sidebar-foreground space-y-1">
-              <p>Followers: {user.followers.total}</p>
-              <p>Plan: {user.product}</p>
-              <p>Country: {user.country}</p>
-            </div>
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">Not logged in</p>
-        )}
-      </div>
-
-      <div className="mt-auto">
-        {isLoggedIn ? (
-          <Button variant="outline" className="w-full" onClick={onLogout}>
-            <LogOut className="h-4 w-4 mr-2" />
-            Logout
-          </Button>
-        ) : (
-          <Button className="w-full" onClick={handleLogin}>
-            Login with Spotify
-          </Button>
-        )}
-      </div>
+    <aside className="p-4">
+      {token ? (
+        <div>
+          <p className="mb-2">Spotify connected</p>
+          <button
+            className="btn"
+            onClick={() => {
+              localStorage.removeItem(TOKEN_KEY);
+              setToken(null);
+            }}
+          >
+            Disconnect
+          </button>
+        </div>
+      ) : (
+        <button className="btn" onClick={() => loginToSpotify()}>
+          Connect Spotify
+        </button>
+      )}
     </aside>
   );
-};
+}
