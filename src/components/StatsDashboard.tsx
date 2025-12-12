@@ -1,3 +1,5 @@
+import { RefreshCw } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import {
   Table,
   TableBody,
@@ -28,6 +30,7 @@ interface StatsDashboardProps {
   artistPlayCounts: Record<string, number>;
   minutesListened: number;
   minutesPerDay: Array<{ date: string; minutes: number }>;
+  onRefresh: () => void;
 }
 
 const formatDuration = (ms: number) => {
@@ -53,6 +56,7 @@ export const StatsDashboard = ({
   artistPlayCounts,
   minutesListened,
   minutesPerDay,
+  onRefresh,
 }: StatsDashboardProps) => {
   const minutesChartData = [...minutesPerDay].slice(0, 14).reverse();
 
@@ -75,9 +79,20 @@ export const StatsDashboard = ({
   return (
     <main className="flex-1 p-8 space-y-6 overflow-auto">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-xl font-semibold text-foreground">Top Tracks & Artists</h2>
-          <p className="text-sm text-muted-foreground">Based on your listening for the selected period.</p>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={onRefresh}
+            disabled={loading}
+            className="shrink-0"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          </Button>
+          <div>
+            <h2 className="text-xl font-semibold text-foreground">Top Tracks & Artists</h2>
+            <p className="text-sm text-muted-foreground">Based on your listening for the selected period.</p>
+          </div>
         </div>
         <Select value={timeRange} onValueChange={value => onTimeRangeChange(value as StatsDashboardProps['timeRange'])}>
           <SelectTrigger className="w-48">
