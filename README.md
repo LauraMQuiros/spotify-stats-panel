@@ -1,75 +1,81 @@
-# Welcome to your Lovable project
+# Spotify Stats Dashboard
 
-## Project info
+![React](https://img.shields.io/badge/React-18.3-61DAFB?style=flat-square&logo=react&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178C6?style=flat-square&logo=typescript&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite-5.0-646CFF?style=flat-square&logo=vite&logoColor=white)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3.4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)
+![Spotify](https://img.shields.io/badge/Spotify_API-1ED760?style=flat-square&logo=spotify&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+A minimal dashboard to view your Spotify listening statistics including top tracks and artists.
 
-## How can I edit this code?
+---
 
-There are several ways of editing your application.
+## ✨ Features
 
-**Use Lovable**
+- 🔐 Spotify OAuth authentication
+- 🎵 View top 10 tracks with popularity and duration
+- 🎤 View top 10 artists with followers and popularity scores
+- 📅 Time range selection (4 weeks, 6 months, all time)
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+## 🚀 Quick Start
 
-Changes made via Lovable will be committed automatically to this repo.
+### Prerequisites
 
-**Use your preferred IDE**
+- Node.js 18+
+- Spotify Developer Account
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+### Setup
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+1. Create a Spotify Developer App at [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
+2. Add `http://localhost:8080` as a Redirect URI in your app settings
+3. Copy your Client ID and replace `YOUR_SPOTIFY_CLIENT_ID` in `src/lib/spotify.ts`
 
-Follow these steps:
+### Installation
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
+# Clone the repository
 git clone https://github.com/LauraMQuiros/spotify-stats-panel.git
+cd spotify-stats-panel
 
-# Step 2: Navigate to the project directory and make a virtual environment
-node -v 
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.6/install.sh | bash
-export NVM_DIR="$([ -z "${XDG_CONFIG_HOME-}" ] && printf %s "${HOME}/.nvm" || printf %s "${XDG_CONFIG_HOME}/nvm")"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-nvm install 20.19
-
-# Step 3: Install the necessary dependencies.
+# Install dependencies
 npm install
-rm -rf node_modules
-npm ci # clean install
 
-# Replace YOUR_SPOTIFY_CLIENT_ID in src/lib/spotify.ts
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Start development server
 npm run dev
 ```
 
-**Use GitHub Codespaces**
+## 📁 Project Structure
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+```
+src/
+├── components/
+│   ├── SpotifySidebar.tsx    # Login & user info
+│   └── StatsDashboard.tsx    # Stats tables
+├── hooks/
+│   └── useSpotify.ts         # Auth & data fetching
+├── lib/
+│   └── spotify.ts            # Spotify API utilities
+└── pages/
+    └── Index.tsx             # Main layout
+```
 
-## What technologies are used for this project?
+## 🛠️ Tech Stack
 
-This project is built with:
+| Technology | Purpose |
+|------------|---------|
+| React | UI Framework |
+| TypeScript | Type Safety |
+| Vite | Build Tool |
+| Tailwind CSS | Styling |
+| Spotify Web API | Data Source |
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## 📄 License
 
-## How can I deploy this project?
+This project is licensed under the MIT License.
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+---
 
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+<p align="center">
+  Made with ❤️ using <a href="https://lovable.dev">Lovable</a>
+</p>

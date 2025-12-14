@@ -124,6 +124,33 @@ export const useSpotify = () => {
     handleCallback();
   }, []);
 
+  const fetchData = async () => {
+    if (!token) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const [userData, tracksData, artistsData, currentlyPlaying, recentlyPlayed, recentPlays] = await Promise.all([
+        fetchUserProfile(token),
+        fetchTopTracks(token, timeRange),
+        fetchTopArtists(token, timeRange),
+        fetchCurrentlyPlayingTrack(token),
+        fetchRecentlyPlayedTrack(token),
+        fetchRecentlyPlayed(token),
+      ]);
+      setUser(userData);
+      setTopTracks(tracksData.items);
+      setTopArtists(artistsData.items);
+      setListening(currentlyPlaying ?? recentlyPlayed ?? null);
+      mergeHistory(recentPlays);
+    } catch (err) {
+      console.error('Data fetch error:', err);
+      setError('Failed to fetch Spotify data. Token may have expired.');
+      logout();
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Fetch user data when token is available or time range changes
   useEffect(() => {
     if (!token) return;
@@ -161,6 +188,10 @@ export const useSpotify = () => {
     fetchData();
   }, [token, timeRange]);
 
+  const refresh = () => {
+    fetchData();
+  };
+
   const logout = () => {
     localStorage.removeItem('spotify_token');
     localStorage.removeItem('code_verifier');
@@ -192,5 +223,6 @@ export const useSpotify = () => {
     loading,
     error,
     logout,
+    refresh,
   };
 };
