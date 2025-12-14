@@ -1,15 +1,17 @@
 // server/index.ts
 import dotenv from 'dotenv';
-dotenv.config(); // loads SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, SPOTIFY_REDIRECT_URI
+dotenv.config();
 import express from 'express';
 import cors from 'cors';
 import spotifyAuthRouter from './spotifyAuth';
+import csvStorageRouter from './csvStorage';  // ← ADD THIS
 
 const app = express();
-app.use(cors({ origin: 'http://127.0.0.1:8080' })); // adjust frontend origin
+app.use(cors({ origin: 'http://127.0.0.1:8080' }));
 app.use(express.json());
 
 app.use('/auth', spotifyAuthRouter);
+app.use('/csv', csvStorageRouter);  // ← ADD THIS
 
 const PORT = process.env.PORT ?? 3000;
 app.listen(PORT, () => {

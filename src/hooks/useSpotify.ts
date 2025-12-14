@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { addTracksToCSV } from '@/lib/csvDatabase';
 import {
   getCodeFromUrl,
   exchangeCodeForToken,
@@ -142,6 +143,10 @@ export const useSpotify = () => {
         setUser(userData);
         setTopTracks(tracksData.items);
         setTopArtists(artistsData.items);
+        // Save tracks to CSV database
+        if (tracksData.items.length > 0) {
+          addTracksToCSV(tracksData.items);
+        }
         setListening(currentlyPlaying ?? recentlyPlayed ?? null);
         mergeHistory(recentPlays);
       } catch (err) {

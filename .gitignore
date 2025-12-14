@@ -25,3 +25,5 @@ dist-ssr
 credentials.txt
 .env
 .venv
+data/*.csv
+!data/.gitkeep
