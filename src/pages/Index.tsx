@@ -20,7 +20,6 @@ const Index = () => {
     artistPlayCounts,
     minutesListened,
     minutesPerDay,
-    refresh,
   } = useSpotify();
   const navigate = useNavigate();
 
@@ -51,7 +50,6 @@ const Index = () => {
         artistPlayCounts={artistPlayCounts}
         minutesListened={minutesListened}
         minutesPerDay={minutesPerDay}
-        onRefresh={refresh}
       />
       {error && (
         <div className="fixed bottom-4 right-4 bg-destructive text-destructive-foreground p-3 rounded-md text-sm">

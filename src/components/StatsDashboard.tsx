@@ -1,5 +1,3 @@
-import { RefreshCw } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import {
   Table,
   TableBody,
@@ -30,7 +28,6 @@ interface StatsDashboardProps {
   artistPlayCounts: Record<string, number>;
   minutesListened: number;
   minutesPerDay: Array<{ date: string; minutes: number }>;
-  onRefresh: () => void;
 }
 
 const formatDuration = (ms: number) => {
@@ -56,7 +53,6 @@ export const StatsDashboard = ({
   artistPlayCounts,
   minutesListened,
   minutesPerDay,
-  onRefresh,
 }: StatsDashboardProps) => {
   const minutesChartData = [...minutesPerDay].slice(0, 14).reverse();
 
@@ -79,20 +75,9 @@ export const StatsDashboard = ({
   return (
     <main className="flex-1 p-8 space-y-6 overflow-auto">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={onRefresh}
-            disabled={loading}
-            className="shrink-0"
-          >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          </Button>
-          <div>
-            <h2 className="text-xl font-semibold text-foreground">Top Tracks & Artists</h2>
-            <p className="text-sm text-muted-foreground">Based on your listening for the selected period.</p>
-          </div>
+        <div>
+          <h2 className="text-xl font-semibold text-foreground">Top Tracks & Artists</h2>
+          <p className="text-sm text-muted-foreground">Based on your listening for the selected period.</p>
         </div>
         <Select value={timeRange} onValueChange={value => onTimeRangeChange(value as StatsDashboardProps['timeRange'])}>
           <SelectTrigger className="w-48">
@@ -120,27 +105,27 @@ export const StatsDashboard = ({
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <section className="rounded-xl border border-border/70 bg-card/80 p-4 shadow-sm">
           <h3 className="mb-3 text-lg font-semibold text-foreground">Top Tracks</h3>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Track</TableHead>
-                <TableHead>Artist</TableHead>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Track</TableHead>
+              <TableHead>Artist</TableHead>
                 <TableHead className="w-28 text-right">Listens</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {topTracks.map((track, index) => (
-                <TableRow key={index}>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {topTracks.map((track, index) => (
+              <TableRow key={index}>
                   <TableCell className="font-medium">{track.name}</TableCell>
                   <TableCell className="text-muted-foreground">{track.artists.map(a => a.name).join(', ')}</TableCell>
                   <TableCell className="text-right">
                     {trackPlayCounts[track.id] ?? 0}
                   </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </section>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </section>
 
         <section className="rounded-xl border border-border/70 bg-card/80 p-4 shadow-sm">
           <h3 className="mb-3 text-lg font-semibold text-foreground">Top Artists</h3>

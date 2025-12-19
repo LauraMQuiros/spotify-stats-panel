@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { addTracksToCSV } from '@/lib/csvDatabase';
 import {
   getCodeFromUrl,
   exchangeCodeForToken,
@@ -16,6 +15,7 @@ import {
   SpotifyListeningContext,
   SpotifyPlayHistoryEntry,
 } from '@/lib/spotify';
+import { addTracksToCSV } from '@/lib/csvDatabase';
 
 export const useSpotify = () => {
   const [token, setToken] = useState<string | null>(null);
@@ -47,12 +47,6 @@ export const useSpotify = () => {
     }
   }, []);
 
-  const persistHistory = (entries: SpotifyPlayHistoryEntry[]) => {
-    setPlayHistory(entries);
-    localStorage.setItem(PLAY_HISTORY_KEY, JSON.stringify(entries));
-    recomputeStats(entries);
-  };
-
   const recomputeStats = (entries: SpotifyPlayHistoryEntry[]) => {
     const sorted = [...entries].sort((a, b) => new Date(b.played_at).getTime() - new Date(a.played_at).getTime());
     const limited = sorted.slice(0, 1000); // keep last 1000 plays
@@ -83,17 +77,29 @@ export const useSpotify = () => {
     );
   };
 
+  const persistHistory = (entries: SpotifyPlayHistoryEntry[]) => {
+    setPlayHistory(entries);
+    localStorage.setItem(PLAY_HISTORY_KEY, JSON.stringify(entries));
+    recomputeStats(entries);
+  };
+
   const mergeHistory = (recent: SpotifyPlayHistoryEntry[]) => {
     if (!recent.length) return;
-    const byKey = new Map<string, SpotifyPlayHistoryEntry>();
-    for (const entry of [...playHistory, ...recent]) {
-      const key = `${entry.track.id}-${entry.played_at}`;
-      if (!byKey.has(key)) byKey.set(key, entry);
-    }
-    const merged = Array.from(byKey.values()).sort(
-      (a, b) => new Date(b.played_at).getTime() - new Date(a.played_at).getTime()
-    );
-    persistHistory(merged.slice(0, 1000));
+    setPlayHistory(currentHistory => {
+      const byKey = new Map<string, SpotifyPlayHistoryEntry>();
+      for (const entry of [...currentHistory, ...recent]) {
+        const key = `${entry.track.id}-${entry.played_at}`;
+        if (!byKey.has(key)) byKey.set(key, entry);
+      }
+      const merged = Array.from(byKey.values()).sort(
+        (a, b) => new Date(b.played_at).getTime() - new Date(a.played_at).getTime()
+      );
+      const final = merged.slice(0, 1000);
+      // Persist to localStorage and recompute stats
+      localStorage.setItem(PLAY_HISTORY_KEY, JSON.stringify(final));
+      recomputeStats(final);
+      return final;
+    });
   };
 
   // Handle OAuth callback with authorization code
@@ -124,33 +130,6 @@ export const useSpotify = () => {
     handleCallback();
   }, []);
 
-  const fetchData = async () => {
-    if (!token) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const [userData, tracksData, artistsData, currentlyPlaying, recentlyPlayed, recentPlays] = await Promise.all([
-        fetchUserProfile(token),
-        fetchTopTracks(token, timeRange),
-        fetchTopArtists(token, timeRange),
-        fetchCurrentlyPlayingTrack(token),
-        fetchRecentlyPlayedTrack(token),
-        fetchRecentlyPlayed(token),
-      ]);
-      setUser(userData);
-      setTopTracks(tracksData.items);
-      setTopArtists(artistsData.items);
-      setListening(currentlyPlaying ?? recentlyPlayed ?? null);
-      mergeHistory(recentPlays);
-    } catch (err) {
-      console.error('Data fetch error:', err);
-      setError('Failed to fetch Spotify data. Token may have expired.');
-      logout();
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // Fetch user data when token is available or time range changes
   useEffect(() => {
     if (!token) return;
@@ -165,17 +144,19 @@ export const useSpotify = () => {
           fetchTopArtists(token, timeRange),
           fetchCurrentlyPlayingTrack(token),
           fetchRecentlyPlayedTrack(token),
-          fetchRecentlyPlayed(token),
+          fetchRecentlyPlayed(token, 50), // Will fetch all available pages automatically
         ]);
         setUser(userData);
         setTopTracks(tracksData.items);
         setTopArtists(artistsData.items);
-        // Save tracks to CSV database
-        if (tracksData.items.length > 0) {
-          addTracksToCSV(tracksData.items);
-        }
         setListening(currentlyPlaying ?? recentlyPlayed ?? null);
         mergeHistory(recentPlays);
+        
+        // Store recently played tracks in CSV (with their played_at timestamps)
+        if (recentPlays.length > 0) {
+          // Send tracks with their played_at timestamps to CSV storage
+          await addTracksToCSV(recentPlays);
+        }
       } catch (err) {
         console.error('Data fetch error:', err);
         setError('Failed to fetch Spotify data. Token may have expired.');
@@ -188,9 +169,38 @@ export const useSpotify = () => {
     fetchData();
   }, [token, timeRange]);
 
-  const refresh = () => {
-    fetchData();
-  };
+  // Periodically fetch recently played tracks to accumulate complete listening history in CSV
+  // Strategy: Spotify API only provides last ~3 days, but by fetching periodically and storing
+  // everything, we accumulate your complete listening history over time
+  useEffect(() => {
+    if (!token) return;
+
+    const fetchRecentPlays = async () => {
+      try {
+        // Fetch ALL available recently played tracks using 'before' parameter pagination
+        // This gets everything Spotify provides (up to ~3 days, but we paginate through all of it)
+        const recentPlays = await fetchRecentlyPlayed(token, 50);
+        if (recentPlays.length > 0) {
+          mergeHistory(recentPlays);
+          // Store in CSV - logs everything the API provides
+          // Over time, this builds your complete listening history
+          await addTracksToCSV(recentPlays);
+        }
+      } catch (err) {
+        console.error('Error fetching recently played tracks:', err);
+        // Don't logout on this error, just log it
+      }
+    };
+
+    // Fetch immediately to get current history
+    fetchRecentPlays();
+
+    // Fetch every 3 minutes to ensure we capture everything and build complete history over time
+    // The more frequently you run this, the more complete your historical log will be
+    const interval = setInterval(fetchRecentPlays, 3 * 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, [token]);
 
   const logout = () => {
     localStorage.removeItem('spotify_token');
@@ -223,6 +233,5 @@ export const useSpotify = () => {
     loading,
     error,
     logout,
-    refresh,
   };
 };

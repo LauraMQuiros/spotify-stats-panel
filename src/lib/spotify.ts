@@ -231,14 +231,58 @@ export const fetchRecentlyPlayedTrack = async (token: string): Promise<SpotifyLi
 };
 
 export const fetchRecentlyPlayed = async (token: string, limit: number = 50): Promise<SpotifyPlayHistoryEntry[]> => {
-  const response = await fetch(`https://api.spotify.com/v1/me/player/recently-played?limit=${limit}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  const allItems: SpotifyPlayHistoryEntry[] = [];
+  let before: number | null = null;
+  let hasMore = true;
+  let pageCount = 0;
+  const maxLimit = 50; // Spotify API maximum (API-imposed limit)
 
-  if (!response.ok) {
-    throw new Error('Failed to fetch recently played tracks');
+  // Fetch ALL available pages using 'before' parameter to paginate through entire history
+  // Note: Spotify API only provides last ~3 days of history, but we'll get everything available
+  // Over time, as you keep the app running, it will accumulate your complete listening history
+  while (hasMore) {
+    let url = `https://api.spotify.com/v1/me/player/recently-played?limit=${maxLimit}`;
+    if (before) {
+      url += `&before=${before}`;
+    }
+
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch recently played tracks');
+    }
+
+    const data = await response.json();
+    const items = (data?.items ?? []) as SpotifyPlayHistoryEntry[];
+    
+    if (items.length === 0) {
+      hasMore = false;
+      break;
+    }
+
+    allItems.push(...items);
+    pageCount++;
+
+    // Continue paginating: use the oldest item's timestamp as 'before' for next page
+    // This allows us to fetch ALL available history (up to Spotify's ~3 day limit)
+    if (items.length > 0) {
+      // Get the oldest timestamp from the current batch (last item is oldest)
+      const oldestItem = items[items.length - 1];
+      const oldestTimestamp = new Date(oldestItem.played_at).getTime();
+      
+      // Only continue if we got a full page (might be more) or if cursor indicates more
+      if (items.length === maxLimit || (data.cursors?.before && oldestTimestamp !== before)) {
+        before = oldestTimestamp;
+      } else {
+        hasMore = false;
+      }
+    } else {
+      hasMore = false;
+    }
   }
 
-  const data = await response.json();
-  return (data?.items ?? []) as SpotifyPlayHistoryEntry[];
+  console.log(`Fetched ${allItems.length} tracks across ${pageCount} pages`);
+  return allItems;
 };
