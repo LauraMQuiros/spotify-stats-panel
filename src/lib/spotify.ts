@@ -140,6 +140,7 @@ export interface SpotifyArtist {
   followers: {
     total: number;
   };
+  images?: Array<{ url: string }>;
 }
 
 export interface SpotifyTrack {

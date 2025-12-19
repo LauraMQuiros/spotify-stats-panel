@@ -18,7 +18,7 @@ const Index = () => {
     setTimeRange,
     trackPlayCounts,
     artistPlayCounts,
-    minutesListened,
+    totalListeningTimeMs,
     minutesPerDay,
   } = useSpotify();
   const navigate = useNavigate();
@@ -48,7 +48,7 @@ const Index = () => {
         onTimeRangeChange={setTimeRange}
         trackPlayCounts={trackPlayCounts}
         artistPlayCounts={artistPlayCounts}
-        minutesListened={minutesListened}
+        totalListeningTimeMs={totalListeningTimeMs}
         minutesPerDay={minutesPerDay}
       />
       {error && (

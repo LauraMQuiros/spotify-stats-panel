@@ -233,3 +233,19 @@ export const getStatistics = async () => {
     averageTracksPerDay: uniqueDates > 0 ? (totalRecords / uniqueDates).toFixed(2) : '0'
   };
 };
+
+// Get total listening time from CSV
+export const getTotalListeningTime = async (): Promise<number> => {
+  try {
+    const response = await fetch(`${API_BASE}/total-listening-time`);
+    const data = await response.json();
+    
+    if (data.success) {
+      return data.totalMs;
+    }
+    return 0;
+  } catch (error) {
+    console.error('Error fetching total listening time:', error);
+    return 0;
+  }
+};

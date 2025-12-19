@@ -2,6 +2,7 @@
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
+import { setToken, clearToken } from './spotifyService';
 
 const router = express.Router();
 const CSV_FILE_PATH = path.join(process.cwd(), 'data', 'spotify_history.csv');
@@ -242,6 +243,69 @@ router.post('/upload', express.text({ type: 'text/csv', limit: '10mb' }), (req, 
   } catch (error) {
     console.error('Error uploading CSV:', error);
     res.status(500).json({ success: false, error: 'Failed to upload CSV' });
+  }
+});
+
+// POST /csv/token - Set Spotify token for background CSV updates
+router.post('/token', (req, res) => {
+  try {
+    const { token } = req.body;
+    
+    if (!token || typeof token !== 'string') {
+      return res.status(400).json({ success: false, error: 'Invalid token' });
+    }
+    
+    setToken(token);
+    res.json({ success: true, message: 'Token set for background CSV updates' });
+  } catch (error) {
+    console.error('Error setting token:', error);
+    res.status(500).json({ success: false, error: 'Failed to set token' });
+  }
+});
+
+// DELETE /csv/token - Clear Spotify token
+router.delete('/token', (req, res) => {
+  try {
+    clearToken();
+    res.json({ success: true, message: 'Token cleared' });
+  } catch (error) {
+    console.error('Error clearing token:', error);
+    res.status(500).json({ success: false, error: 'Failed to clear token' });
+  }
+});
+
+// GET /csv/total-listening-time - Calculate total listening time from CSV
+router.get('/total-listening-time', (req, res) => {
+  try {
+    ensureCSVFile();
+    const csvContent = fs.readFileSync(CSV_FILE_PATH, 'utf8');
+    const lines = csvContent.split('\n').filter(line => line.trim());
+    
+    // Skip header line
+    const dataLines = lines.slice(1);
+    
+    let totalMs = 0;
+    
+    for (const line of dataLines) {
+      const fields = parseCSVLine(line);
+      if (fields.length >= 6) {
+        const durationMs = parseInt(fields[5], 10);
+        if (!isNaN(durationMs)) {
+          totalMs += durationMs;
+        }
+      }
+    }
+    
+    res.json({ 
+      success: true, 
+      totalMs,
+      totalMinutes: Math.floor(totalMs / 60000),
+      totalHours: Math.floor(totalMs / 3600000),
+      totalDays: Math.floor(totalMs / 86400000)
+    });
+  } catch (error) {
+    console.error('Error calculating total listening time:', error);
+    res.status(500).json({ success: false, error: 'Failed to calculate total listening time' });
   }
 });
 

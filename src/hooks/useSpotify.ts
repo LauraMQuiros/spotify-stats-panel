@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   getCodeFromUrl,
   exchangeCodeForToken,
@@ -15,7 +15,7 @@ import {
   SpotifyListeningContext,
   SpotifyPlayHistoryEntry,
 } from '@/lib/spotify';
-import { addTracksToCSV } from '@/lib/csvDatabase';
+import { addTracksToCSV, getTotalListeningTime } from '@/lib/csvDatabase';
 
 export const useSpotify = () => {
   const [token, setToken] = useState<string | null>(null);
@@ -27,7 +27,7 @@ export const useSpotify = () => {
   const [playHistory, setPlayHistory] = useState<SpotifyPlayHistoryEntry[]>([]);
   const [trackPlayCounts, setTrackPlayCounts] = useState<Record<string, number>>({});
   const [artistPlayCounts, setArtistPlayCounts] = useState<Record<string, number>>({});
-  const [minutesListened, setMinutesListened] = useState<number>(0);
+  const [totalListeningTimeMs, setTotalListeningTimeMs] = useState<number>(0);
   const [minutesPerDay, setMinutesPerDay] = useState<Array<{ date: string; minutes: number }>>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,7 +69,6 @@ export const useSpotify = () => {
 
     setTrackPlayCounts(trackCounts);
     setArtistPlayCounts(artistCounts);
-    setMinutesListened(Math.round(totalMs / 60000));
     setMinutesPerDay(
       Object.entries(perDay)
         .sort(([a], [b]) => (a < b ? 1 : -1))
@@ -83,7 +82,7 @@ export const useSpotify = () => {
     recomputeStats(entries);
   };
 
-  const mergeHistory = (recent: SpotifyPlayHistoryEntry[]) => {
+  const mergeHistory = useCallback((recent: SpotifyPlayHistoryEntry[]) => {
     if (!recent.length) return;
     setPlayHistory(currentHistory => {
       const byKey = new Map<string, SpotifyPlayHistoryEntry>();
@@ -100,7 +99,7 @@ export const useSpotify = () => {
       recomputeStats(final);
       return final;
     });
-  };
+  }, []);
 
   // Handle OAuth callback with authorization code
   useEffect(() => {
@@ -114,6 +113,19 @@ export const useSpotify = () => {
           const accessToken = await exchangeCodeForToken(code);
           localStorage.setItem('spotify_token', accessToken);
           setToken(accessToken);
+          
+          // Send token to backend for background CSV updates
+          try {
+            await fetch('http://localhost:3000/csv/token', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ token: accessToken }),
+            });
+            console.log('✓ Token sent to backend for CSV auto-updates');
+          } catch (err) {
+            console.warn('⚠ Failed to send token to backend (CSV auto-updates may not work):', err);
+          }
+          
           clearTokenFromUrl();
         } catch (err) {
           console.error('Token exchange error:', err);
@@ -124,6 +136,18 @@ export const useSpotify = () => {
         }
       } else if (storedToken) {
         setToken(storedToken);
+        
+        // Send existing token to backend for background CSV updates
+        try {
+          await fetch('http://localhost:3000/csv/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: storedToken }),
+          });
+          console.log('✓ Token sent to backend for CSV auto-updates');
+        } catch (err) {
+          console.warn('⚠ Failed to send token to backend (CSV auto-updates may not work):', err);
+        }
       }
     };
 
@@ -173,34 +197,68 @@ export const useSpotify = () => {
   // Strategy: Spotify API only provides last ~3 days, but by fetching periodically and storing
   // everything, we accumulate your complete listening history over time
   useEffect(() => {
-    if (!token) return;
+    if (!token) {
+      console.log('⏸ CSV auto-update paused: No token');
+      return;
+    }
 
     const fetchRecentPlays = async () => {
       try {
+        console.log('🔄 Fetching recently played tracks for CSV...');
         // Fetch ALL available recently played tracks using 'before' parameter pagination
         // This gets everything Spotify provides (up to ~3 days, but we paginate through all of it)
         const recentPlays = await fetchRecentlyPlayed(token, 50);
+        console.log(`📊 Fetched ${recentPlays.length} recently played tracks`);
+        
         if (recentPlays.length > 0) {
           mergeHistory(recentPlays);
           // Store in CSV - logs everything the API provides
           // Over time, this builds your complete listening history
+          console.log('💾 Storing tracks in CSV...');
           await addTracksToCSV(recentPlays);
+          console.log('✅ CSV update complete');
+        } else {
+          console.log('ℹ No new tracks to add');
         }
       } catch (err) {
-        console.error('Error fetching recently played tracks:', err);
+        console.error('❌ Error fetching recently played tracks:', err);
         // Don't logout on this error, just log it
       }
     };
 
     // Fetch immediately to get current history
+    console.log('🚀 Starting CSV auto-update (every 3 minutes)');
     fetchRecentPlays();
 
     // Fetch every 3 minutes to ensure we capture everything and build complete history over time
     // The more frequently you run this, the more complete your historical log will be
     const interval = setInterval(fetchRecentPlays, 3 * 60 * 1000);
 
+    return () => {
+      console.log('⏹ Stopping CSV auto-update');
+      clearInterval(interval);
+    };
+  }, [token, mergeHistory]);
+
+  // Fetch total listening time from CSV periodically
+  useEffect(() => {
+    const fetchTotalTime = async () => {
+      try {
+        const totalMs = await getTotalListeningTime();
+        setTotalListeningTimeMs(totalMs);
+      } catch (err) {
+        console.error('Error fetching total listening time:', err);
+      }
+    };
+
+    // Fetch immediately
+    fetchTotalTime();
+
+    // Then fetch every 30 seconds to keep it updated
+    const interval = setInterval(fetchTotalTime, 30000);
+
     return () => clearInterval(interval);
-  }, [token]);
+  }, []);
 
   const logout = () => {
     localStorage.removeItem('spotify_token');
@@ -213,9 +271,19 @@ export const useSpotify = () => {
     setPlayHistory([]);
     setTrackPlayCounts({});
     setArtistPlayCounts({});
-    setMinutesListened(0);
+    setTotalListeningTimeMs(0);
     setMinutesPerDay([]);
     localStorage.removeItem(PLAY_HISTORY_KEY);
+    
+    // Clear token from backend
+    try {
+      fetch('http://localhost:3000/csv/token', {
+        method: 'DELETE',
+      });
+      console.log('✓ Token cleared from backend');
+    } catch (err) {
+      console.warn('⚠ Failed to clear token from backend:', err);
+    }
   };
 
   return {
@@ -228,7 +296,7 @@ export const useSpotify = () => {
     setTimeRange,
     trackPlayCounts,
     artistPlayCounts,
-    minutesListened,
+    totalListeningTimeMs,
     minutesPerDay,
     loading,
     error,

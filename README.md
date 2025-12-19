@@ -28,8 +28,13 @@ A minimal dashboard to view your Spotify listening statistics including top trac
 ### Setup
 
 1. Create a Spotify Developer App at [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
-2. Add `http://localhost:8080` as a Redirect URI in your app settings
-3. Copy your Client ID and replace `YOUR_SPOTIFY_CLIENT_ID` in `src/lib/spotify.ts`
+2. Add `http://http://127.0.0.1:8080/callback` as a Redirect URI in your app settings (otherwise you might need to change some other code but nothing too hard)
+3. Make a .env file in the root directory with structure
+```
+VITE_SPOTIFY_CLIENT_ID=client_id_here
+VITE_SPOTIFY_REDIRECT_URI=http://127.0.0.1:8080/callback/
+```
+
 
 ### Installation
 
