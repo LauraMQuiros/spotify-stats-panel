@@ -78,11 +78,6 @@ export const getCodeFromUrl = (): string | null => {
   return params.get('code');
 };
 
-export const getTokenFromUrl = (): string | null => {
-  // This is now used only for checking existing tokens
-  // The actual token exchange happens in exchangeCodeForToken
-  return null;
-};
 
 export const exchangeCodeForToken = async (code: string): Promise<string> => {
   const codeVerifier = localStorage.getItem('code_verifier');
@@ -116,6 +111,54 @@ export const exchangeCodeForToken = async (code: string): Promise<string> => {
 
   // Clean up code verifier
   localStorage.removeItem('code_verifier');
+
+  // Log the full response for debugging
+  console.log('Token exchange response:', {
+    hasAccessToken: !!data.access_token,
+    hasRefreshToken: !!data.refresh_token,
+    expiresIn: data.expires_in,
+    scope: data.scope,
+  });
+
+  // Store refresh token in localStorage as backup (for manual extraction if needed)
+  if (data.refresh_token) {
+    localStorage.setItem('spotify_refresh_token', data.refresh_token);
+    console.log('✓ Refresh token stored in localStorage (backup)');
+  }
+
+  // Send refresh token to backend to save in .env
+  if (data.refresh_token) {
+    try {
+      const refreshResponse = await fetch('http://localhost:3000/csv/refresh-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken: data.refresh_token }),
+      });
+      
+      if (refreshResponse.ok) {
+        const result = await refreshResponse.json();
+        console.log('✓ Refresh token sent to backend for .env storage:', result.message);
+        console.log('   You can now use the backend service without frontend login!');
+      } else {
+        const error = await refreshResponse.text();
+        console.error('✗ Backend rejected refresh token:', error);
+        console.error('   You can manually add it to .env:');
+        console.error(`   SPOTIFY_REFRESH_TOKEN=${data.refresh_token}`);
+      }
+    } catch (err) {
+      console.error('✗ Failed to send refresh token to backend:', err);
+      console.error('   You can manually add it to .env:');
+      console.error(`   SPOTIFY_REFRESH_TOKEN=${data.refresh_token}`);
+    }
+  } else {
+    console.warn('⚠ No refresh token in response.');
+    console.warn('   This happens if you\'ve already authorized the app.');
+    console.warn('   To get a refresh token:');
+    console.warn('   1. Go to https://www.spotify.com/account/apps/');
+    console.warn('   2. Click "Remove Access" for your app');
+    console.warn('   3. Log in again through this frontend');
+    console.warn('   4. The refresh token will be automatically saved');
+  }
 
   return data.access_token;
 };
@@ -194,41 +237,46 @@ export const fetchTopArtists = async (token: string, timeRange: string = 'medium
   return fetchSpotifyData(`/me/top/artists?time_range=${timeRange}&limit=20`, token);
 };
 
-export const fetchCurrentlyPlayingTrack = async (token: string): Promise<SpotifyListeningContext | null> => {
-  const response = await fetch('https://api.spotify.com/v1/me/player/currently-playing', {
+// Fetch a single track from Spotify (currently playing or recently played)
+const fetchSingleTrack = async (
+  token: string,
+  type: 'currently-playing' | 'recently-played'
+): Promise<SpotifyListeningContext | null> => {
+  const endpoint = type === 'currently-playing'
+    ? 'https://api.spotify.com/v1/me/player/currently-playing'
+    : 'https://api.spotify.com/v1/me/player/recently-played?limit=1';
+
+  const response = await fetch(endpoint, {
     headers: { Authorization: `Bearer ${token}` },
   });
 
-  if (response.status === 204) {
+  if (type === 'currently-playing' && response.status === 204) {
     // 204 No Content means nothing is currently playing
     return null;
   }
 
   if (!response.ok) {
-    throw new Error('Failed to fetch currently playing track');
+    throw new Error(`Failed to fetch ${type.replace('-', ' ')} track`);
   }
 
   const data = await response.json();
-  if (!data?.item) return null;
 
-  return { track: data.item as SpotifyTrack, isPlaying: !!data.is_playing };
+  if (type === 'currently-playing') {
+    if (!data?.item) return null;
+    return { track: data.item as SpotifyTrack, isPlaying: !!data.is_playing };
+  } else {
+    const recentTrack = data?.items?.[0]?.track as SpotifyTrack | undefined;
+    if (!recentTrack) return null;
+    return { track: recentTrack, isPlaying: false };
+  }
+};
+
+export const fetchCurrentlyPlayingTrack = async (token: string): Promise<SpotifyListeningContext | null> => {
+  return fetchSingleTrack(token, 'currently-playing');
 };
 
 export const fetchRecentlyPlayedTrack = async (token: string): Promise<SpotifyListeningContext | null> => {
-  const response = await fetch('https://api.spotify.com/v1/me/player/recently-played?limit=1', {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-
-  if (!response.ok) {
-    throw new Error('Failed to fetch recently played track');
-  }
-
-  const data = await response.json();
-  const recentTrack = data?.items?.[0]?.track as SpotifyTrack | undefined;
-
-  if (!recentTrack) return null;
-
-  return { track: recentTrack, isPlaying: false };
+  return fetchSingleTrack(token, 'recently-played');
 };
 
 export const fetchRecentlyPlayed = async (token: string, limit: number = 50): Promise<SpotifyPlayHistoryEntry[]> => {

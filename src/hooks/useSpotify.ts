@@ -76,11 +76,6 @@ export const useSpotify = () => {
     );
   };
 
-  const persistHistory = (entries: SpotifyPlayHistoryEntry[]) => {
-    setPlayHistory(entries);
-    localStorage.setItem(PLAY_HISTORY_KEY, JSON.stringify(entries));
-    recomputeStats(entries);
-  };
 
   const mergeHistory = useCallback((recent: SpotifyPlayHistoryEntry[]) => {
     if (!recent.length) return;
@@ -193,52 +188,8 @@ export const useSpotify = () => {
     fetchData();
   }, [token, timeRange]);
 
-  // Periodically fetch recently played tracks to accumulate complete listening history in CSV
-  // Strategy: Spotify API only provides last ~3 days, but by fetching periodically and storing
-  // everything, we accumulate your complete listening history over time
-  useEffect(() => {
-    if (!token) {
-      console.log('⏸ CSV auto-update paused: No token');
-      return;
-    }
-
-    const fetchRecentPlays = async () => {
-      try {
-        console.log('🔄 Fetching recently played tracks for CSV...');
-        // Fetch ALL available recently played tracks using 'before' parameter pagination
-        // This gets everything Spotify provides (up to ~3 days, but we paginate through all of it)
-        const recentPlays = await fetchRecentlyPlayed(token, 50);
-        console.log(`📊 Fetched ${recentPlays.length} recently played tracks`);
-        
-        if (recentPlays.length > 0) {
-          mergeHistory(recentPlays);
-          // Store in CSV - logs everything the API provides
-          // Over time, this builds your complete listening history
-          console.log('💾 Storing tracks in CSV...');
-          await addTracksToCSV(recentPlays);
-          console.log('✅ CSV update complete');
-        } else {
-          console.log('ℹ No new tracks to add');
-        }
-      } catch (err) {
-        console.error('❌ Error fetching recently played tracks:', err);
-        // Don't logout on this error, just log it
-      }
-    };
-
-    // Fetch immediately to get current history
-    console.log('🚀 Starting CSV auto-update (every 3 minutes)');
-    fetchRecentPlays();
-
-    // Fetch every 3 minutes to ensure we capture everything and build complete history over time
-    // The more frequently you run this, the more complete your historical log will be
-    const interval = setInterval(fetchRecentPlays, 3 * 60 * 1000);
-
-    return () => {
-      console.log('⏹ Stopping CSV auto-update');
-      clearInterval(interval);
-    };
-  }, [token, mergeHistory]);
+  // Note: CSV updates are now handled by the backend service automatically
+  // The backend runs every 3 minutes and updates the CSV using the refresh token from .env
 
   // Fetch total listening time from CSV periodically
   useEffect(() => {

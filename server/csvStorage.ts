@@ -2,7 +2,8 @@
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
-import { setToken, clearToken } from './spotifyService';
+import { setToken, clearToken, saveRefreshTokenToEnv } from './spotifyService';
+import { parseCSVLine, addTracksToCSVFile } from './csvUtils';
 
 const router = express.Router();
 const CSV_FILE_PATH = path.join(process.cwd(), 'data', 'spotify_history.csv');
@@ -38,42 +39,6 @@ try {
   console.error(`✗ Failed to initialize CSV storage:`, error);
 }
 
-// Escape CSV field
-const escapeCSV = (field: string): string => {
-  if (field.includes(',') || field.includes('"') || field.includes('\n')) {
-    return `"${field.replace(/"/g, '""')}"`;
-  }
-  return field;
-};
-
-// Helper to parse CSV line (handles quoted fields)
-const parseCSVLine = (line: string): string[] => {
-  const result: string[] = [];
-  let current = '';
-  let inQuotes = false;
-  
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-    const nextChar = line[i + 1];
-    
-    if (char === '"') {
-      if (inQuotes && nextChar === '"') {
-        current += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
-    } else if (char === ',' && !inQuotes) {
-      result.push(current);
-      current = '';
-    } else {
-      current += char;
-    }
-  }
-  
-  result.push(current);
-  return result;
-};
 
 // GET /csv - Health check endpoint
 router.get('/', (req, res) => {
@@ -83,18 +48,34 @@ router.get('/', (req, res) => {
     const lines = csvContent.split('\n').filter(line => line.trim());
     const recordCount = Math.max(0, lines.length - 1); // Subtract header
     
+    // Check if refresh token exists in .env
+    const envPath = path.join(process.cwd(), '.env');
+    let hasRefreshToken = false;
+    if (fs.existsSync(envPath)) {
+      const envContent = fs.readFileSync(envPath, 'utf8');
+      hasRefreshToken = envContent.includes('SPOTIFY_REFRESH_TOKEN=');
+    }
+    
     res.json({ 
       success: true, 
       message: 'CSV storage is working',
       filePath: CSV_FILE_PATH,
       recordCount,
+      hasRefreshToken,
       endpoints: {
         'GET /csv': 'This endpoint (health check)',
         'GET /csv/records': 'Get all CSV records',
         'POST /csv/add': 'Add tracks to CSV (requires JSON body)',
         'GET /csv/download': 'Download CSV file',
-        'DELETE /csv/clear': 'Clear all records'
-      }
+        'DELETE /csv/clear': 'Clear all records',
+        'POST /csv/token': 'Set Spotify token for background updates',
+        'DELETE /csv/token': 'Clear Spotify token',
+        'POST /csv/refresh-token': 'Save refresh token to .env',
+        'GET /csv/total-listening-time': 'Get total listening time from CSV',
+      },
+      ...(hasRefreshToken ? {} : {
+        warning: 'No refresh token found in .env. Log in through the frontend to get one automatically, or add SPOTIFY_REFRESH_TOKEN to .env manually.'
+      })
     });
   } catch (error) {
     console.error('Error in CSV health check:', error);
@@ -129,60 +110,12 @@ router.post('/add', (req, res) => {
 
     // Read existing CSV
     const existingContent = fs.readFileSync(CSV_FILE_PATH, 'utf8');
-    const existingLines = existingContent.split('\n').filter(line => line.trim());
     
-    // Create set of existing track IDs + exact timestamps (only to prevent exact duplicate API responses)
-    // This allows the same song to appear multiple times if played at different times
-    const existingKeys = new Set(
-      existingLines.slice(1).map(line => {
-        const fields = parseCSVLine(line);
-        if (fields.length >= 8) {
-          // Use trackId + exact timestamp as unique key (only prevents exact duplicates from API)
-          return `${fields[1]}-${fields[7]}`;
-        }
-        return null;
-      }).filter((key): key is string => key !== null)
-    );
+    // Use shared function to add tracks
+    const addedCount = addTracksToCSVFile(CSV_FILE_PATH, tracks, existingContent);
     
-    // Create new CSV lines for tracks - log every play
-    const newLines: string[] = [];
-    let addedCount = 0;
-    
-    tracks.forEach((item: any) => {
-      // Support both formats: direct track object or { track, played_at } format
-      const track = item.track || item;
-      const playedAt = item.played_at || new Date().toISOString();
-      
-      // Extract date from played_at timestamp
-      const date = new Date(playedAt).toISOString().split('T')[0];
-      
-      // Only deduplicate on exact trackId + exact timestamp match
-      // This means: same song at different times = logged multiple times ✓
-      //            same song at same exact time (duplicate API response) = deduplicated ✓
-      const key = `${track.id}-${playedAt}`;
-      if (!existingKeys.has(key)) {
-        const line = [
-          date,
-          track.id,
-          escapeCSV(track.name),
-          escapeCSV(track.artists.map((a: any) => a.name).join('; ')),
-          escapeCSV(track.album.name),
-          track.duration_ms.toString(),
-          track.popularity.toString(),
-          playedAt
-        ].join(',');
-        
-        newLines.push(line);
-        addedCount++;
-        existingKeys.add(key); // Prevent duplicates within the same batch
-      }
-    });
-    
-    // Append new lines to CSV
-    if (newLines.length > 0) {
-      const newContent = existingContent.trimEnd() + '\n' + newLines.join('\n') + '\n';
-      fs.writeFileSync(CSV_FILE_PATH, newContent, 'utf8');
-      console.log(`✓ Successfully added ${addedCount} new tracks to CSV (${newLines.length} total lines)`);
+    if (addedCount > 0) {
+      console.log(`✓ Successfully added ${addedCount} new tracks to CSV`);
     } else {
       console.log(`ℹ No new tracks to add (all ${tracks.length} tracks already exist)`);
     }
@@ -271,6 +204,27 @@ router.delete('/token', (req, res) => {
   } catch (error) {
     console.error('Error clearing token:', error);
     res.status(500).json({ success: false, error: 'Failed to clear token' });
+  }
+});
+
+// POST /csv/refresh-token - Save refresh token to .env file
+router.post('/refresh-token', (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+    
+    console.log('Received refresh token request:', { hasToken: !!refreshToken, tokenLength: refreshToken?.length });
+    
+    if (!refreshToken || typeof refreshToken !== 'string') {
+      console.error('Invalid refresh token:', { refreshToken, type: typeof refreshToken });
+      return res.status(400).json({ success: false, error: 'Invalid refresh token' });
+    }
+    
+    saveRefreshTokenToEnv(refreshToken);
+    console.log('✓ Refresh token saved to .env file successfully');
+    res.json({ success: true, message: 'Refresh token saved to .env file' });
+  } catch (error) {
+    console.error('✗ Error saving refresh token:', error);
+    res.status(500).json({ success: false, error: 'Failed to save refresh token' });
   }
 });
 
