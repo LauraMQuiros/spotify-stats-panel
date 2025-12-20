@@ -67,6 +67,22 @@ export const addTracksToCSV = async (tracks: SpotifyPlayHistoryEntry[] | Spotify
 export const getTotalListeningTime = async (): Promise<number> => {
   try {
     const response = await fetch(`${API_BASE}/total-listening-time`);
+    
+    if (!response.ok) {
+      let errorMessage = `HTTP ${response.status}`;
+      // Read response as text first (body stream can only be read once)
+      const errorText = await response.text();
+      try {
+        // Try to parse as JSON
+        const errorData = JSON.parse(errorText);
+        errorMessage = errorData.error || errorData.message || errorMessage;
+      } catch {
+        // If not JSON, use the text as-is
+        errorMessage = errorText || errorMessage;
+      }
+      throw new Error(errorMessage);
+    }
+    
     const data = await response.json();
     
     if (data.success) {

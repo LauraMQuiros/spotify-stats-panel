@@ -140,15 +140,27 @@ export const exchangeCodeForToken = async (code: string): Promise<string> => {
         console.log('✓ Refresh token sent to backend for .env storage:', result.message);
         console.log('   You can now use the backend service without frontend login!');
       } else {
-        const error = await refreshResponse.text();
-        console.error('✗ Backend rejected refresh token:', error);
+        let errorMessage = 'Unknown error';
+        // Read response as text first (body stream can only be read once)
+        const errorText = await refreshResponse.text();
+        try {
+          // Try to parse as JSON
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.error || errorData.message || errorMessage;
+        } catch {
+          // If not JSON, use the text as-is
+          errorMessage = errorText || errorMessage;
+        }
+        console.error('✗ Backend rejected refresh token:', errorMessage);
         console.error('   You can manually add it to .env:');
-        console.error(`   SPOTIFY_REFRESH_TOKEN=${data.refresh_token}`);
+        console.error('   SPOTIFY_REFRESH_TOKEN=<your_refresh_token_here>');
+        console.error('   (Refresh token is available in localStorage as spotify_refresh_token)');
       }
     } catch (err) {
       console.error('✗ Failed to send refresh token to backend:', err);
       console.error('   You can manually add it to .env:');
-      console.error(`   SPOTIFY_REFRESH_TOKEN=${data.refresh_token}`);
+      console.error('   SPOTIFY_REFRESH_TOKEN=<your_refresh_token_here>');
+      console.error('   (Refresh token is available in localStorage as spotify_refresh_token)');
     }
   } else {
     console.warn('⚠ No refresh token in response.');
@@ -279,7 +291,7 @@ export const fetchRecentlyPlayedTrack = async (token: string): Promise<SpotifyLi
   return fetchSingleTrack(token, 'recently-played');
 };
 
-export const fetchRecentlyPlayed = async (token: string, limit: number = 50): Promise<SpotifyPlayHistoryEntry[]> => {
+export const fetchRecentlyPlayed = async (token: string): Promise<SpotifyPlayHistoryEntry[]> => {
   const allItems: SpotifyPlayHistoryEntry[] = [];
   let before: number | null = null;
   let hasMore = true;
@@ -287,6 +299,7 @@ export const fetchRecentlyPlayed = async (token: string, limit: number = 50): Pr
   const maxLimit = 50; // Spotify API maximum (API-imposed limit)
 
   // Fetch ALL available pages using 'before' parameter to paginate through entire history
+  // This function always fetches all available history (not limited)
   // Note: Spotify API only provides last ~3 days of history, but we'll get everything available
   // Over time, as you keep the app running, it will accumulate your complete listening history
   while (hasMore) {
@@ -321,8 +334,9 @@ export const fetchRecentlyPlayed = async (token: string, limit: number = 50): Pr
       const oldestItem = items[items.length - 1];
       const oldestTimestamp = new Date(oldestItem.played_at).getTime();
       
-      // Only continue if we got a full page (might be more) or if cursor indicates more
-      if (items.length === maxLimit || (data.cursors?.before && oldestTimestamp !== before)) {
+      // Only continue if we got a full page (50 items) - this indicates there might be more data
+      // If we got fewer than maxLimit items, we've reached the end of available history
+      if (items.length === maxLimit) {
         before = oldestTimestamp;
       } else {
         hasMore = false;

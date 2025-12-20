@@ -34,20 +34,7 @@ export const useSpotify = () => {
 
   const PLAY_HISTORY_KEY = 'spotify_play_history';
 
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(PLAY_HISTORY_KEY);
-      if (saved) {
-        const parsed: SpotifyPlayHistoryEntry[] = JSON.parse(saved);
-        setPlayHistory(parsed);
-        recomputeStats(parsed);
-      }
-    } catch {
-      // ignore corrupted local storage
-    }
-  }, []);
-
-  const recomputeStats = (entries: SpotifyPlayHistoryEntry[]) => {
+  const recomputeStats = useCallback((entries: SpotifyPlayHistoryEntry[]) => {
     const sorted = [...entries].sort((a, b) => new Date(b.played_at).getTime() - new Date(a.played_at).getTime());
     const limited = sorted.slice(0, 1000); // keep last 1000 plays
 
@@ -74,7 +61,20 @@ export const useSpotify = () => {
         .sort(([a], [b]) => (a < b ? 1 : -1))
         .map(([date, ms]) => ({ date, minutes: Math.round(ms / 60000) }))
     );
-  };
+  }, []); // Empty deps: only uses stable state setters
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(PLAY_HISTORY_KEY);
+      if (saved) {
+        const parsed: SpotifyPlayHistoryEntry[] = JSON.parse(saved);
+        setPlayHistory(parsed);
+        recomputeStats(parsed);
+      }
+    } catch {
+      // ignore corrupted local storage
+    }
+  }, [recomputeStats]);
 
 
   const mergeHistory = useCallback((recent: SpotifyPlayHistoryEntry[]) => {
@@ -94,7 +94,7 @@ export const useSpotify = () => {
       recomputeStats(final);
       return final;
     });
-  }, []);
+  }, [recomputeStats]);
 
   // Handle OAuth callback with authorization code
   useEffect(() => {
@@ -111,12 +111,28 @@ export const useSpotify = () => {
           
           // Send token to backend for background CSV updates
           try {
-            await fetch('http://localhost:3000/csv/token', {
+            const response = await fetch('http://localhost:3000/csv/token', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ token: accessToken }),
             });
-            console.log('✓ Token sent to backend for CSV auto-updates');
+            
+            if (response.ok) {
+              console.log('✓ Token sent to backend for CSV auto-updates');
+            } else {
+              let errorMessage = `HTTP ${response.status}`;
+              // Read response as text first (body stream can only be read once)
+              const errorText = await response.text();
+              try {
+                // Try to parse as JSON
+                const errorData = JSON.parse(errorText);
+                errorMessage = errorData.error || errorData.message || errorMessage;
+              } catch {
+                // If not JSON, use the text as-is
+                errorMessage = errorText || errorMessage;
+              }
+              console.warn('⚠ Failed to send token to backend (CSV auto-updates may not work):', errorMessage);
+            }
           } catch (err) {
             console.warn('⚠ Failed to send token to backend (CSV auto-updates may not work):', err);
           }
@@ -134,12 +150,28 @@ export const useSpotify = () => {
         
         // Send existing token to backend for background CSV updates
         try {
-          await fetch('http://localhost:3000/csv/token', {
+          const response = await fetch('http://localhost:3000/csv/token', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ token: storedToken }),
           });
-          console.log('✓ Token sent to backend for CSV auto-updates');
+          
+          if (response.ok) {
+            console.log('✓ Token sent to backend for CSV auto-updates');
+          } else {
+            let errorMessage = `HTTP ${response.status}`;
+            // Read response as text first (body stream can only be read once)
+            const errorText = await response.text();
+            try {
+              // Try to parse as JSON
+              const errorData = JSON.parse(errorText);
+              errorMessage = errorData.error || errorData.message || errorMessage;
+            } catch {
+              // If not JSON, use the text as-is
+              errorMessage = errorText || errorMessage;
+            }
+            console.warn('⚠ Failed to send token to backend (CSV auto-updates may not work):', errorMessage);
+          }
         } catch (err) {
           console.warn('⚠ Failed to send token to backend (CSV auto-updates may not work):', err);
         }
@@ -163,7 +195,7 @@ export const useSpotify = () => {
           fetchTopArtists(token, timeRange),
           fetchCurrentlyPlayingTrack(token),
           fetchRecentlyPlayedTrack(token),
-          fetchRecentlyPlayed(token, 50), // Will fetch all available pages automatically
+          fetchRecentlyPlayed(token), // Fetches all available recently played history
         ]);
         setUser(userData);
         setTopTracks(tracksData.items);
@@ -186,7 +218,7 @@ export const useSpotify = () => {
     };
 
     fetchData();
-  }, [token, timeRange]);
+  }, [token, timeRange, mergeHistory]);
 
   // Note: CSV updates are now handled by the backend service automatically
   // The backend runs every 3 minutes and updates the CSV using the refresh token from .env
@@ -227,14 +259,30 @@ export const useSpotify = () => {
     localStorage.removeItem(PLAY_HISTORY_KEY);
     
     // Clear token from backend
-    try {
-      fetch('http://localhost:3000/csv/token', {
-        method: 'DELETE',
+    fetch('http://localhost:3000/csv/token', {
+      method: 'DELETE',
+    })
+      .then(async (response) => {
+        if (response.ok) {
+          console.log('✓ Token cleared from backend');
+        } else {
+          let errorMessage = `HTTP ${response.status}`;
+          // Read response as text first (body stream can only be read once)
+          const errorText = await response.text();
+          try {
+            // Try to parse as JSON
+            const errorData = JSON.parse(errorText);
+            errorMessage = errorData.error || errorData.message || errorMessage;
+          } catch {
+            // If not JSON, use the text as-is
+            errorMessage = errorText || errorMessage;
+          }
+          console.warn('⚠ Failed to clear token from backend:', errorMessage);
+        }
+      })
+      .catch((err) => {
+        console.warn('⚠ Failed to clear token from backend:', err);
       });
-      console.log('✓ Token cleared from backend');
-    } catch (err) {
-      console.warn('⚠ Failed to clear token from backend:', err);
-    }
   };
 
   return {

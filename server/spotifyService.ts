@@ -15,7 +15,8 @@ const ENV_FILE_PATH = path.join(process.cwd(), '.env');
 // Get credentials from .env
 const CLIENT_ID = process.env.VITE_SPOTIFY_CLIENT_ID || process.env.SPOTIFY_CLIENT_ID;
 const CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET;
-const REFRESH_TOKEN = process.env.SPOTIFY_REFRESH_TOKEN;
+// Use let instead of const so we can update it when saveRefreshTokenToEnv is called
+let REFRESH_TOKEN = process.env.SPOTIFY_REFRESH_TOKEN;
 
 // Store token in memory (cached access token)
 let cachedAccessToken: string | null = null;
@@ -73,10 +74,15 @@ export const saveRefreshTokenToEnv = (refreshToken: string): void => {
     fs.writeFileSync(ENV_FILE_PATH, envContent, 'utf8');
     console.log(`✓ Refresh token saved to .env file successfully (file size: ${envContent.length} characters)`);
     
+    // Update the in-memory variable so it's immediately available
+    REFRESH_TOKEN = refreshToken;
+    // Also update process.env so dotenv.config() will pick it up if called again
+    process.env.SPOTIFY_REFRESH_TOKEN = refreshToken;
+    
     // Verify it was saved
     const verifyContent = fs.readFileSync(ENV_FILE_PATH, 'utf8');
     if (verifyContent.includes(`SPOTIFY_REFRESH_TOKEN=${refreshToken}`)) {
-      console.log('✓ Verified: Refresh token is in .env file');
+      console.log('✓ Verified: Refresh token is in .env file and in-memory variable updated');
     } else {
       console.error('✗ Verification failed: Refresh token not found in .env after write');
     }
@@ -220,7 +226,9 @@ const fetchRecentlyPlayed = async (token: string): Promise<any[]> => {
       const oldestItem = items[items.length - 1];
       const oldestTimestamp = new Date(oldestItem.played_at).getTime();
       
-      if (items.length === maxLimit || (data.cursors?.before && oldestTimestamp !== before)) {
+      // Only continue if we got a full page (50 items) - this indicates there might be more data
+      // If we got fewer than maxLimit items, we've reached the end of available history
+      if (items.length === maxLimit) {
         before = oldestTimestamp;
       } else {
         hasMore = false;
