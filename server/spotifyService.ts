@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import fetch from 'node-fetch';
 import dotenv from 'dotenv';
-import { addTracksToCSVFile } from './csvUtils';
+import { addTracksToCSVFileSafely } from './csvUtils';
 
 dotenv.config();
 
@@ -242,17 +242,14 @@ const fetchRecentlyPlayed = async (token: string): Promise<any[]> => {
 };
 
 
-// Update CSV with new tracks
+// Update CSV with new tracks (uses safe wrapper with locking)
 const updateCSV = async (tracks: any[]): Promise<number> => {
   if (!fs.existsSync(CSV_FILE_PATH)) {
     throw new Error('CSV file does not exist');
   }
 
-  // Read existing CSV
-  const existingContent = fs.readFileSync(CSV_FILE_PATH, 'utf8');
-  
-  // Use shared function to add tracks
-  return addTracksToCSVFile(CSV_FILE_PATH, tracks, existingContent);
+  // Use safe wrapper that handles file read and write with locking
+  return await addTracksToCSVFileSafely(CSV_FILE_PATH, tracks);
 };
 
 // Fetch and update CSV
@@ -297,6 +294,23 @@ const fetchAndUpdateCSV = async (): Promise<void> => {
 
 // Start the periodic CSV update service
 let updateInterval: NodeJS.Timeout | null = null;
+let isUpdating = false; // Lock to prevent concurrent execution
+
+// Fetch and update CSV with locking mechanism
+const fetchAndUpdateCSVWithLock = async (): Promise<void> => {
+  // Skip if already updating
+  if (isUpdating) {
+    console.log('⏸ CSV update already in progress, skipping...');
+    return;
+  }
+
+  isUpdating = true;
+  try {
+    await fetchAndUpdateCSV();
+  } finally {
+    isUpdating = false;
+  }
+};
 
 export const startCSVUpdateService = (intervalMinutes: number = 3) => {
   if (updateInterval) {
@@ -306,12 +320,12 @@ export const startCSVUpdateService = (intervalMinutes: number = 3) => {
 
   console.log(`🚀 Starting CSV auto-update service (every ${intervalMinutes} minutes)`);
   
-  // Fetch immediately on startup
-  fetchAndUpdateCSV();
+  // Fetch immediately on startup (fire and forget, but locked)
+  fetchAndUpdateCSVWithLock();
   
   // Then fetch periodically
   updateInterval = setInterval(() => {
-    fetchAndUpdateCSV();
+    fetchAndUpdateCSVWithLock();
   }, intervalMinutes * 60 * 1000);
 };
 

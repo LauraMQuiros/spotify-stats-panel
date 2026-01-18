@@ -3,7 +3,7 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import { setToken, clearToken, saveRefreshTokenToEnv } from './spotifyService';
-import { parseCSVLine, addTracksToCSVFile } from './csvUtils';
+import { parseCSVLine, addTracksToCSVFileSafely } from './csvUtils';
 
 const router = express.Router();
 const CSV_FILE_PATH = path.join(process.cwd(), 'data', 'spotify_history.csv');
@@ -96,7 +96,7 @@ router.get('/records', (req, res) => {
 });
 
 // POST /csv/add - Add new tracks (recently played with timestamps)
-router.post('/add', (req, res) => {
+router.post('/add', async (req, res) => {
   try {
     ensureCSVFile();
     const { tracks } = req.body;
@@ -108,11 +108,8 @@ router.post('/add', (req, res) => {
       return res.status(400).json({ success: false, error: 'Invalid tracks data' });
     }
 
-    // Read existing CSV
-    const existingContent = fs.readFileSync(CSV_FILE_PATH, 'utf8');
-    
-    // Use shared function to add tracks
-    const addedCount = addTracksToCSVFile(CSV_FILE_PATH, tracks, existingContent);
+    // Use safe wrapper that handles file read and write with locking
+    const addedCount = await addTracksToCSVFileSafely(CSV_FILE_PATH, tracks);
     
     if (addedCount > 0) {
       console.log(`✓ Successfully added ${addedCount} new tracks to CSV`);
@@ -125,9 +122,11 @@ router.post('/add', (req, res) => {
       message: `Added ${addedCount} new tracks`,
       addedCount 
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('✗ Error adding tracks to CSV:', error);
-    res.status(500).json({ success: false, error: 'Failed to add tracks to CSV' });
+    const errorMessage = error?.message || 'Failed to add tracks to CSV';
+    const statusCode = errorMessage.includes('already in progress') ? 409 : 500;
+    res.status(statusCode).json({ success: false, error: errorMessage });
   }
 });
 

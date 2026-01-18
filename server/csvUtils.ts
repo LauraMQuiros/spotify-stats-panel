@@ -3,6 +3,47 @@
 
 import fs from 'fs';
 
+// Shared lock to prevent concurrent CSV writes
+let csvWriteLock = false;
+
+// Acquire lock for CSV write operation
+// Returns false if lock is already held, true if acquired
+const acquireCSVLock = (): boolean => {
+  if (csvWriteLock) {
+    return false;
+  }
+  csvWriteLock = true;
+  return true;
+};
+
+// Release CSV write lock
+const releaseCSVLock = (): void => {
+  csvWriteLock = false;
+};
+
+// Safely add tracks to CSV file with locking mechanism
+// Reads file, calls addTracksToCSVFile, and ensures lock is released
+export const addTracksToCSVFileSafely = async (
+  csvFilePath: string,
+  tracks: any[]
+): Promise<number> => {
+  // Try to acquire lock
+  if (!acquireCSVLock()) {
+    throw new Error('CSV write operation already in progress. Please try again later.');
+  }
+
+  try {
+    // Read existing CSV
+    const existingContent = fs.readFileSync(csvFilePath, 'utf8');
+    
+    // Add tracks (this will write to the file)
+    return addTracksToCSVFile(csvFilePath, tracks, existingContent);
+  } finally {
+    // Always release lock
+    releaseCSVLock();
+  }
+};
+
 // Parse CSV line (handles quoted fields)
 export const parseCSVLine = (line: string): string[] => {
   const result: string[] = [];
